@@ -4,6 +4,7 @@ use v5.6.1;
 use Carp ();
 use warnings;
 use strict;
+use base qw(Test::WWW::Mechanize);
 
 =head1 NAME
 
