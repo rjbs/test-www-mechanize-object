@@ -1,5 +1,6 @@
 package Test::WWW::Mechanize::Object;
 
+use v5.6.1;
 use Carp ();
 use warnings;
 use strict;
