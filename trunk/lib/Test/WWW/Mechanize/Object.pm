@@ -41,6 +41,12 @@ method.
 
 =head1 METHODS
 
+=head2 uri_base
+
+This method should return the current base for request URLs.
+
+This method B<must> exist.
+
 =head2 request
 
   $obj->request($request);
@@ -50,8 +56,7 @@ only argument.  It should return a
 L<HTTP::Response|HTTP::Response> object.  It should not
 follow redirects; LWP will take care of that.
 
-This is the only method that handler objects B<must>
-implement.
+This method B<must> exist.
 
 =head2 prepare_request
 
@@ -62,6 +67,8 @@ preparation.
 
 Note: this method will be called once per request in a redirect
 chain.
+
+This method is optional.
 
 =head2 before_request
 
@@ -83,12 +90,16 @@ and Mech have done any post-processing.
 Note: this method will be called once per request in a redirect
 chain.
 
+This method is optional.
+
 =head2 on_redirect
 
   $obj->on_redirect($request, $response);
 
 Called after C<after_request> each time the object returns a response that is a
 redirect (3XX status code). 
+
+This method is optional.
 
 =head1 INTERNALS
 
@@ -128,6 +139,38 @@ sub _make_request {
   my ($self, $request, @rest) = @_;
   $self->__hook(prepare_request => [ $request ]);
   $self->SUPER::_make_request($request, @rest);
+}
+
+=head2 get
+
+=head2 head
+
+=head2 post
+
+Overridden (from LWP::UserAgent) to allow path-only URLs to be passed in, e.g.
+
+  $mech->get('/foo', ...);
+
+=cut
+
+sub __urlize {
+  my $self = shift;
+  my $url  = shift;
+  if ($url =~ m!^/!) {
+    $url = $self->{handler}->uri_base . $url;
+  }
+  return ($url, @_);
+}
+
+BEGIN {
+  for my $sub (qw(get head post)) {
+    no strict 'refs';
+    *$sub = sub {
+      my $self = shift;
+      my $meth = "SUPER::$sub";
+      $self->$meth($self->__urlize(@_));
+    }
+  }
 }
 
 =head2 send_request 

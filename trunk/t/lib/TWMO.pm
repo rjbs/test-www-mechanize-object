@@ -9,6 +9,8 @@ sub new {
   bless {} => shift;
 }
 
+sub uri_base { 'http://localhost.localdomain' }
+
 sub request {
   my ($self, $request) = @_;
   my $query = { $request->uri->query_form };
@@ -35,6 +37,13 @@ END
       $query->{pie} || "void",
     )
   );
+  if (($request->uri->path_segments)[1] and
+        ($request->uri->path_segments)[1] eq 'cookie') {
+    $response->header(
+      'Set-Cookie' => 'cookie=yummy; domain=' . $uri->host . "; path=/"
+    );
+  }
+
   return $response;
 }
 
@@ -42,7 +51,9 @@ package TWMO::Remote;
 
 use URI;
 our @ISA = qw(TWMO);
-my $DEFAULT = URI->new("http://localhost")->canonical;
+my $DEFAULT = URI->new("http://localhost.localdomain")->canonical;
+
+sub uri_base { $ENV{TWMO_SERVER} || "http://localhost.localdomain" }
 
 sub prepare_request {
   my ($self, $request) = @_;
@@ -78,6 +89,38 @@ sub before_request {
     $request->uri($uri->canonical);
   }
 #  main::diag($request->uri);
+}
+
+sub request {
+  my ($self, $request) = @_;
+  my $response = $self->SUPER::request($request);
+
+  # this is redundant in some ways
+  $self->prepare_request($request);
+  
+  my $twmo = URI->new($ENV{TWMO_SERVER} || return $response);
+
+  for my $header (qw(Set-Cookie Set-Cookie2 Set-Cookie3 Location)) {
+    my @values = $response->header($header);
+    $response->header($header => [ map {
+      #warn "$header: was: $_\n";
+      # the extra slash is necessary because $DEFAULT will
+      # often (always?) end with a slash, while the
+      # environment variable may not.
+      s{$DEFAULT}{$twmo/};
+      if (/\bdomain=\Q@{[ $DEFAULT->host ]}\E([;\s]|$)/ and
+            /\bpath=\Q@{[ $DEFAULT->path ]}\E([;\s]|$)/) {
+        s{\bdomain=\Q@{[ $DEFAULT->host ]}\E([;\s]|$)}
+          {domain=@{[ $twmo->host ]}$1};
+        s{\bpath=\Q@{[ $DEFAULT->path ]}\E([;\s]|$)}
+          {path=@{[ $twmo->path ]}$1};
+      }
+      #warn "$header: now: $_\n";
+      $_
+    } @values ]);
+  }
+  
+  return $response;
 }
 
 1;
