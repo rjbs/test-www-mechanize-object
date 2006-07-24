@@ -53,61 +53,62 @@ use URI;
 our @ISA = qw(TWMO);
 my $DEFAULT = URI->new("http://localhost.localdomain")->canonical;
 
-sub uri_base { $ENV{TWMO_SERVER} || "http://localhost.localdomain" }
+sub uri_base { $ENV{TWMO_SERVER} || shift->SUPER::uri_base }
 
-sub prepare_request {
-  my ($self, $request) = @_;
-  my $uri = $request->uri;
-  my $twmo = URI->new($ENV{TWMO_SERVER} || return);
-
-  if ($uri->scheme eq $DEFAULT->scheme and
-        $uri->host eq $DEFAULT->host) {
-    $uri->scheme($twmo->scheme);
-    $uri->host($twmo->host);
-    my $path = $twmo->path . '/' . $uri->path;
-    $path =~ s{/+}{/}g;
-    $uri->path($path);
-
-    $request->uri($uri->canonical);
+sub __munge_uri {
+  my ($uri, $old, $new) = @_;
+  my $clone = $uri->clone;
+  #warn "starting to convert $old to $new in $uri\n";
+  for my $part (qw(host scheme)) {
+    return unless $clone->$part eq $old->$part;
   }
-#  main::diag($request->uri);
+  my %path = (
+    clone => [ grep { length } $clone->path_segments ],
+    old   => [ grep { length } $old->path_segments ],
+  );
+  while (@{$path{clone}} and @{$path{old}}
+           and $path{clone}->[0] eq $path{old}->[0]
+         ) {
+    #warn "'$path{clone}[0]' matches '$path{old}[0]'\n";
+    shift @{$path{$_}} for qw(clone old);
+  }
+  if (@{$path{old}}) {
+    # unmatched path parts remaining
+    #warn "unmatched path parts: '@{$path{old}}'\n";
+    return;
+  }
+  for my $part (qw(host scheme)) {
+    $clone->$part($new->$part);
+  }
+  my $path = join "/", $new->path_segments, @{$path{clone}};
+  $path =~ s{/+}{/}g;
+  $clone->path($path);
+  #warn "converted $uri to $clone\n";
+  return $clone->canonical;
+}
+
+sub __munge_request_uri {
+  my $req = shift;
+  my $clone = __munge_uri( $req->uri, @_ ) || return;
+  $req->uri($clone);
 }
 
 sub before_request {
   my ($self, $request) = @_;
-  my $uri = $request->uri;
   my $twmo = URI->new($ENV{TWMO_SERVER} || return);
-
-  if ($uri->scheme eq $twmo->scheme and
-        $uri->host eq $twmo->host and
-          $uri->path =~ /^\Q@{[ $twmo->path ]}\E/) {
-    $uri->scheme($DEFAULT->scheme);
-    $uri->host($DEFAULT->host);
-    my $path = $uri->path;
-    $path =~ s,^\Q@{[ $twmo->path ]}\E/*,,;
-    $uri->path($path);
-    $request->uri($uri->canonical);
-  }
-#  main::diag($request->uri);
+  __munge_request_uri($request, $twmo, $DEFAULT);
 }
 
-sub request {
-  my ($self, $request) = @_;
-  my $response = $self->SUPER::request($request);
-
-  # this is redundant in some ways
-  $self->prepare_request($request);
+sub after_request {
+  my ($self, $request, $response) = @_;
   
-  my $twmo = URI->new($ENV{TWMO_SERVER} || return $response);
+  my $twmo = URI->new($ENV{TWMO_SERVER} || return);
+  __munge_request_uri($request, $DEFAULT, $twmo);
 
-  for my $header (qw(Set-Cookie Set-Cookie2 Set-Cookie3 Location)) {
+  for my $header (qw(Set-Cookie Set-Cookie2 Set-Cookie3)) {
     my @values = $response->header($header);
     $response->header($header => [ map {
       #warn "$header: was: $_\n";
-      # the extra slash is necessary because $DEFAULT will
-      # often (always?) end with a slash, while the
-      # environment variable may not.
-      s{$DEFAULT}{$twmo/};
       if (/\bdomain=\Q@{[ $DEFAULT->host ]}\E([;\s]|$)/ and
             /\bpath=\Q@{[ $DEFAULT->path ]}\E([;\s]|$)/) {
         s{\bdomain=\Q@{[ $DEFAULT->host ]}\E([;\s]|$)}
@@ -119,8 +120,16 @@ sub request {
       $_
     } @values ]);
   }
-  
-  return $response;
+}
+
+sub on_redirect {
+  my ($self, $request, $response) = @_;
+  my $twmo = URI->new($ENV{TWMO_SERVER} || return);
+  my $clone = __munge_uri(
+    URI->new($response->header('Location')),
+    $DEFAULT, $twmo
+  ) || return;
+  $response->header(Location => $clone);
 }
 
 1;

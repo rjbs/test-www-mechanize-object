@@ -31,6 +31,7 @@ TESTS: {
   
   $mech->content_like(qr{to /kitchen},  "got to the kitchen");
   $mech->content_like(qr{a cherry pie}, "got a cherry pie");
+  #diag $mech->content;
   
   $mech->get_ok(
     "/windowsill?pie=random",
@@ -40,6 +41,7 @@ TESTS: {
   $mech->content_like(qr{to /windowsill}, "path preserved");
   $mech->content_unlike(qr{a random pie}, "no longer random pie");
   $mech->content_unlike(qr{a void pie},   "not a void pie either");
+  #diag $mech->content;
 
   $mech->get_ok(
     "/cookie",
@@ -47,6 +49,7 @@ TESTS: {
   );
   $mech->content_like(qr{to /cookie}, "got cookie url");
   like $mech->cookie_jar->as_string, qr/cookie=yummy/, "cookie set";
+  #diag $mech->content;
 
   unless ($i++) {
     # switch to remote-possible mode and try them all again

@@ -84,8 +84,8 @@ chain.
 
   $obj->after_request($request, $response);
 
-Called after the object has returned its response and LWP
-and Mech have done any post-processing.
+Called after the object has returned its response, but
+before LWP and Mech have done any post-processing.
 
 Note: this method will be called once per request in a redirect
 chain.
@@ -153,10 +153,11 @@ Overridden (from LWP::UserAgent) to allow path-only URLs to be passed in, e.g.
 
 =cut
 
-sub __urlize {
+sub __add_uri_base {
   my $self = shift;
   my $url  = shift;
   if ($url =~ m!^/!) {
+    #warn "prepending uri_base to $url\n";
     $url = $self->{handler}->uri_base . $url;
   }
   return ($url, @_);
@@ -168,7 +169,7 @@ BEGIN {
     *$sub = sub {
       my $self = shift;
       my $meth = "SUPER::$sub";
-      $self->$meth($self->__urlize(@_));
+      $self->$meth($self->__add_uri_base(@_));
     }
   }
 }
@@ -188,9 +189,9 @@ sub send_request {
   $self->__hook(before_request => [ $request ]);
   my $response = $self->{handler}->request($request);
   $response->request($request);
-  $self->cookie_jar->extract_cookies($response) if $self->cookie_jar;
-  
+
   $self->__hook(after_request => [ $request, $response ]);
+  $self->cookie_jar->extract_cookies($response) if $self->cookie_jar;
 
   if ($response->is_redirect) {
     $self->__hook(on_redirect => [ $request, $response ]);
