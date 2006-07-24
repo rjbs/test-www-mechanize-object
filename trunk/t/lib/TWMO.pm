@@ -59,7 +59,7 @@ sub prepare_request {
 
     $request->uri($uri->canonical);
   }
-  main::diag($request->uri);
+#  main::diag($request->uri);
 }
 
 sub before_request {
@@ -75,9 +75,9 @@ sub before_request {
     my $path = $uri->path;
     $path =~ s,^\Q@{[ $twmo->path ]}\E/*,,;
     $uri->path($path);
-    $request->uri($uri);
+    $request->uri($uri->canonical);
   }
-  main::diag($uri);
+#  main::diag($request->uri);
 }
 
 1;
