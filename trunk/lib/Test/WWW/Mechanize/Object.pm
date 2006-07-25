@@ -181,7 +181,7 @@ sub __add_url_base {
 }
 
 # replaces "$old" with "$new" in $uri
-sub __munge_uri {
+sub __rebase_uri {
   my ($uri, $old, $new) = @_;
   return $uri if $old->eq($new);
   my $clone = $uri->clone;
@@ -210,9 +210,9 @@ sub __munge_uri {
   return $clone->canonical;
 }
 
-sub __munge_request_uri {
+sub __rebase_request_uri {
   my $req = shift;
-  $req->uri( __munge_uri( $req->uri, @_ ) );
+  $req->uri( __rebase_uri( $req->uri, @_ ) );
 }
 
 sub __url_base {
@@ -260,7 +260,7 @@ sub send_request {
   my ($self, $request, $arg, $size) = @_;
   $self->__hook(before_request => [ $request ]);
   # url_base will have already been added, so we change it to the default here
-  __munge_request_uri(
+  __rebase_request_uri(
     $request,
     $self->__url_base,
     $self->__default_url_base,
@@ -270,7 +270,7 @@ sub send_request {
 
   $self->__hook(after_request => [ $request, $response ]);
   # change the default back to the real current url_base for cookie extraction
-  __munge_request_uri(
+  __rebase_request_uri(
     $request,
     $self->__default_url_base,
     $self->__url_base,
@@ -302,7 +302,7 @@ sub send_request {
     $self->__hook(on_redirect => [ $request, $response ]);
     unless ($self->__url_base->eq($self->__default_url_base)) {
       $response->header(
-        Location => __munge_uri(
+        Location => __rebase_uri(
           URI->new($response->header('Location')),
           $self->__default_url_base,
           $self->__url_base,
@@ -313,6 +313,11 @@ sub send_request {
 
   return $response;
 }
+
+=head1 TODO
+
+Consider using L<URI::WithBase|URI::WithBase> instead of
+rebasing URIs internally.
 
 =head1 SEE ALSO
 
