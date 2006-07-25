@@ -42,12 +42,6 @@ method.
 
 =head1 METHODS
 
-=head2 url_base
-
-This method should return the current base for request URLs.
-
-This method B<must> exist.
-
 =head2 request
 
   $obj->request($request);
@@ -58,6 +52,27 @@ L<HTTP::Response|HTTP::Response> object.  It should not
 follow redirects; LWP will take care of that.
 
 This method B<must> exist.
+
+=head2 url_base
+
+=head2 default_url_base
+
+These method should return the current or default base for
+request URLs, e.g.
+
+  http://localhost.localdomain (the default default)
+  http://myserver.com/myurl
+
+These methods are optional.  They are provided for handler
+objects that change their behavior based on some contextual
+information (e.g. %ENV).  If this confuses you, you probably
+don't need them.
+
+The results of these methods are cached after being called
+once, so if your object's return values might change during
+program execution, that will not be reflected properly in
+Test::WWW::Mechanize::Object.  If this matters to anyone,
+send me a bug.
 
 =head2 prepare_request
 
@@ -159,9 +174,65 @@ sub __add_url_base {
   my $url  = shift;
   if ($url =~ m!^/!) {
     #warn "prepending url_base to $url\n";
-    $url = $self->{handler}->url_base . $url;
+    $url = $self->__url_base . $url;
+    $url =~ s{(?<!:)/+}{/}g;
   }
   return ($url, @_);
+}
+
+# replaces "$old" with "$new" in $uri
+sub __munge_uri {
+  my ($uri, $old, $new) = @_;
+  return $uri if $old->eq($new);
+  my $clone = $uri->clone;
+  for my $part (qw(host scheme)) {
+    return $uri unless $clone->$part eq $old->$part;
+  }
+  my %path = (
+    clone => [ grep { length } $clone->path_segments ],
+    old   => [ grep { length } $old->path_segments ],
+  );
+  while (@{$path{clone}} and @{$path{old}}
+           and $path{clone}->[0] eq $path{old}->[0]
+         ) {
+    shift @{$path{$_}} for qw(clone old);
+  }
+  if (@{$path{old}}) {
+    # unmatched path parts remaining
+    return $uri;
+  }
+  for my $part (qw(host scheme)) {
+    $clone->$part($new->$part);
+  }
+  my $path = join "/", $new->path_segments, @{$path{clone}};
+  $path =~ s{/+}{/}g;
+  $clone->path($path);
+  return $clone->canonical;
+}
+
+sub __munge_request_uri {
+  my $req = shift;
+  $req->uri( __munge_uri( $req->uri, @_ ) );
+}
+
+sub __url_base {
+  my $self = shift;
+  return $self->{__url_base} ||= (
+    $self->{handler}->can('url_base') ?
+      URI->new($self->{handler}->url_base)->canonical :
+        $self->__default_url_base
+      );
+}
+
+sub __default_url_base {
+  my $self = shift;
+  return $self->{__default_url_base} ||= (
+    URI->new(
+      $self->{handler}->can('default_url_base') ?
+        $self->{handler}->default_url_base :
+          'http://localhost.localdomain'
+        )
+  );
 }
 
 BEGIN {
@@ -188,14 +259,56 @@ LWP::UserAgent uses.
 sub send_request {
   my ($self, $request, $arg, $size) = @_;
   $self->__hook(before_request => [ $request ]);
+  # url_base will have already been added, so we change it to the default here
+  __munge_request_uri(
+    $request,
+    $self->__url_base,
+    $self->__default_url_base,
+  );
   my $response = $self->{handler}->request($request);
   $response->request($request);
 
   $self->__hook(after_request => [ $request, $response ]);
+  # change the default back to the real current url_base for cookie extraction
+  __munge_request_uri(
+    $request,
+    $self->__default_url_base,
+    $self->__url_base,
+  );
+  # change cookie and location headers
+  unless ($self->__url_base->eq($self->__default_url_base)) {
+    for my $header (qw(Set-Cookie Set-Cookie2 Set-Cookie3)) {
+      my @values = $response->header($header);
+      $response->header($header => [ map {
+        #warn "$header: was: $_\n";
+        my $domain = $self->__default_url_base->host;
+        my $path   = $self->__default_url_base->path || '/';
+        if (m{  \b domain = \Q$domain\E ([;\s]|$) }x and
+              m{\b path   = \Q$path\E ([;\s]|$) }x) {
+          s{    \b domain = \Q$domain\E ([;\s]|$) }
+            {domain=@{[ $self->__url_base->host ]}$1}x;
+          s{    \b path   = \Q$path\E ([;\s]|$)}
+            {path=@{[ $self->__url_base->path ]}$1}x;
+        }
+        #warn "$header: now: $_\n";
+        $_
+      } @values ]);
+    }
+  }
+
   $self->cookie_jar->extract_cookies($response) if $self->cookie_jar;
 
   if ($response->is_redirect) {
     $self->__hook(on_redirect => [ $request, $response ]);
+    unless ($self->__url_base->eq($self->__default_url_base)) {
+      $response->header(
+        Location => __munge_uri(
+          URI->new($response->header('Location')),
+          $self->__default_url_base,
+          $self->__url_base,
+        ),
+      );
+    }
   }
 
   return $response;

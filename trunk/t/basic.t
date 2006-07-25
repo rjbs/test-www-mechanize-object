@@ -55,6 +55,7 @@ TESTS: {
     # switch to remote-possible mode and try them all again
     $ENV{TWMO_SERVER} = 'http://myserver.com/myurl';
     $mech->{handler} = TWMO::Remote->new;
+    delete @{$mech}{qw(__default_url_base __url_base)};
     $mech->cookie_jar({});
     redo TESTS;
   }
