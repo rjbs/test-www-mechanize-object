@@ -9,7 +9,7 @@ sub new {
   bless {} => shift;
 }
 
-sub uri_base { 'http://localhost.localdomain' }
+sub url_base { 'http://localhost.localdomain' }
 
 sub request {
   my ($self, $request) = @_;
@@ -53,7 +53,7 @@ use URI;
 our @ISA = qw(TWMO);
 my $DEFAULT = URI->new("http://localhost.localdomain")->canonical;
 
-sub uri_base { $ENV{TWMO_SERVER} || shift->SUPER::uri_base }
+sub url_base { $ENV{TWMO_SERVER} || shift->SUPER::url_base }
 
 sub __munge_uri {
   my ($uri, $old, $new) = @_;

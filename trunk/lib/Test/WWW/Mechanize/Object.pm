@@ -23,7 +23,8 @@ our $VERSION = '0.01';
 
   use Test::WWW::Mechanize::Object;
   my $mech = Test::WWW::Mechanize::Object->new(handler => $obj);
-  # use $mech as usual
+  $mech->get_ok('/foo');
+  # use $mech as usual, omitting scheme/host if you want to
 
 =head1 DESCRIPTION
 
@@ -41,7 +42,7 @@ method.
 
 =head1 METHODS
 
-=head2 uri_base
+=head2 url_base
 
 This method should return the current base for request URLs.
 
@@ -153,12 +154,12 @@ Overridden (from LWP::UserAgent) to allow path-only URLs to be passed in, e.g.
 
 =cut
 
-sub __add_uri_base {
+sub __add_url_base {
   my $self = shift;
   my $url  = shift;
   if ($url =~ m!^/!) {
-    #warn "prepending uri_base to $url\n";
-    $url = $self->{handler}->uri_base . $url;
+    #warn "prepending url_base to $url\n";
+    $url = $self->{handler}->url_base . $url;
   }
   return ($url, @_);
 }
@@ -169,7 +170,7 @@ BEGIN {
     *$sub = sub {
       my $self = shift;
       my $meth = "SUPER::$sub";
-      $self->$meth($self->__add_uri_base(@_));
+      $self->$meth($self->__add_url_base(@_));
     }
   }
 }
