@@ -249,6 +249,8 @@ L<http://search.cpan.org/dist/Test-WWW-Mechanize-Object>
 
 =head1 ACKNOWLEDGEMENTS
 
+Thanks to Pobox.com, who sponsored the original development of this module.
+
 =head1 COPYRIGHT & LICENSE
 
 Copyright 2006 Hans Dieter Pearcey, all rights reserved.
