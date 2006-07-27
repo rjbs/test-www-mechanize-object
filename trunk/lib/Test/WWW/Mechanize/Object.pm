@@ -13,11 +13,11 @@ requests on an object
 
 =head1 VERSION
 
-Version 0.01
+Version 0.01_01
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.01_01';
 
 =head1 SYNOPSIS
 
@@ -76,7 +76,7 @@ send me a bug.
 
 =head2 prepare_request
 
-  $obj->prepare_request($request);
+  $obj->prepare_request($request, $mech);
 
 Called before LWP and Mech do all their request object
 preparation.
@@ -88,7 +88,7 @@ This method is optional.
 
 =head2 before_request
 
-  $obj->before_request($request);
+  $obj->before_request($request, $mech);
 
 Called after LWP and Mech do their request object
 preparation, but before C<< $obj->request >> is called.
@@ -98,10 +98,10 @@ chain.
 
 =head2 after_request
 
-  $obj->after_request($request, $response);
+  $obj->after_request($request, $response, $mech);
 
-Called after the object has returned its response, but
-before LWP and Mech have done any post-processing.
+Called after the object has returned its response, but before
+LWP and Mech have done any post-processing.
 
 Note: this method will be called once per request in a redirect
 chain.
@@ -110,7 +110,7 @@ This method is optional.
 
 =head2 on_redirect
 
-  $obj->on_redirect($request, $response);
+  $obj->on_redirect($request, $response, $mech);
 
 Called after C<after_request> each time the object returns a response that is a
 redirect (3XX status code). 
@@ -153,7 +153,7 @@ Overridden (from WWW::Mechanize) to call the C<prepare_request> hook.
 
 sub _make_request {
   my ($self, $request, @rest) = @_;
-  $self->__hook(prepare_request => [ $request ]);
+  $self->__hook(prepare_request => [ $request, $self ]);
   $self->SUPER::_make_request($request, @rest);
 }
 
@@ -258,7 +258,7 @@ LWP::UserAgent uses.
 
 sub send_request {
   my ($self, $request, $arg, $size) = @_;
-  $self->__hook(before_request => [ $request ]);
+  $self->__hook(before_request => [ $request, $self ]);
   # url_base will have already been added, so we change it to the default here
   __rebase_request_uri(
     $request,
@@ -268,7 +268,6 @@ sub send_request {
   my $response = $self->{handler}->request($request);
   $response->request($request);
 
-  $self->__hook(after_request => [ $request, $response ]);
   # change the default back to the real current url_base for cookie extraction
   __rebase_request_uri(
     $request,
@@ -298,8 +297,10 @@ sub send_request {
 
   $self->cookie_jar->extract_cookies($response) if $self->cookie_jar;
 
+  $self->__hook(after_request => [ $request, $response, $self ]);
+
   if ($response->is_redirect) {
-    $self->__hook(on_redirect => [ $request, $response ]);
+    $self->__hook(on_redirect => [ $request, $response, $self ]);
     unless ($self->__url_base->eq($self->__default_url_base)) {
       $response->header(
         Location => __rebase_uri(
