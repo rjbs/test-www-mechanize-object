@@ -13,11 +13,11 @@ requests on an object
 
 =head1 VERSION
 
-Version 0.01_01
+Version 0.020
 
 =cut
 
-our $VERSION = '0.01_01';
+our $VERSION = '0.020';
 
 =head1 SYNOPSIS
 
